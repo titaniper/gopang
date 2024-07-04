@@ -3,7 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/google/uuid"
 	"net/http"
+	"sync"
+	"time"
 )
 
 // setJSONContentType는 모든 응답에 Content-Type 헤더를 설정하는 미들웨어입니다.
@@ -14,12 +17,70 @@ func setJSONContentType(next http.Handler) http.Handler {
 	})
 }
 
+const maxConcurrentRequests = 3
+
+var mu sync.Mutex
+var currentRequests int
+var count int
+
+func worker(txId string, id int, wg *sync.WaitGroup) {
+	defer wg.Done()
+
+	// 임계 구역에 들어가기 전에 잠금
+	mu.Lock()
+	if currentRequests >= maxConcurrentRequests {
+		fmt.Printf("Return %s %d, %d\n", txId, id, currentRequests)
+		mu.Unlock() // 조건이 만족되지 않으면 잠금을 해제하고 리턴
+		return
+	}
+	fmt.Printf("gogo1 %s %d, %d, %d\n", txId, id, count, currentRequests)
+	currentRequests++
+	count++
+	mu.Unlock()
+
+	// 작업 수행
+	fmt.Printf("Worker %s %d is doing work\n", txId, id)
+
+	fmt.Printf("gogo2 %s %d, %d, %d\n", txId, id, count, currentRequests)
+	time.Sleep(1 * time.Second) // 작업을 시뮬레이션
+
+	fmt.Printf("gogo3 %s %d, %d, %d\n", txId, id, count, currentRequests)
+
+	// 작업 완료 후 임계 구역에 들어가기 전에 잠금
+	mu.Lock()
+	fmt.Printf("gogo4 %s %d, %d, %d\n", txId, id, count, currentRequests)
+	currentRequests--
+	mu.Unlock()
+}
+
+func writeResponse(w http.ResponseWriter, count int) {
+	json.NewEncoder(w).Encode(map[string][]string{
+		"data": {"하이", fmt.Sprintf("하이 %d", count)},
+	})
+}
+
 func clientsHandler(w http.ResponseWriter, r *http.Request) {
+	// 새로운 UUID 생성
+	txId := uuid.New().String()
+	fmt.Printf("Generated txId: %s\n", txId)
+
+	//if r.Method == http.MethodGet {
+	//	w.Header().Set("Content-Type", "application/json")
+	//	var wg sync.WaitGroup
+	//	for i := 0; i < 10; i++ {
+	//		wg.Add(1)
+	//		go worker(txId, i, &wg)
+	//		fmt.Printf("count: %s, %d, %d, %d\n", txId, i, count, currentRequests)
+	//	}
+	//	wg.Wait()
+	//} else {
+	//	w.WriteHeader(http.StatusMethodNotAllowed)
+	//	fmt.Fprintf(w, "405 - Method Not Allowed")
+	//}
+
 	if r.Method == http.MethodGet {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string][]string{
-			"data": {"하이", "하이"},
-		})
+		defer writeResponse(w, count)
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		fmt.Fprintf(w, "405 - Method Not Allowed")
