@@ -29,7 +29,7 @@ func worker(txId string, id int, wg *sync.WaitGroup) {
 	// 임계 구역에 들어가기 전에 잠금
 	mu.Lock()
 	if currentRequests >= maxConcurrentRequests {
-		fmt.Printf("Return %s %d, %d\n", txId, id, currentRequests)
+		fmt.Printf("Return %s %d, %d, %d\n", txId, id, count, currentRequests)
 		mu.Unlock() // 조건이 만족되지 않으면 잠금을 해제하고 리턴
 		return
 	}
@@ -66,6 +66,7 @@ func clientsHandler(w http.ResponseWriter, r *http.Request) {
 
 	//if r.Method == http.MethodGet {
 	//	w.Header().Set("Content-Type", "application/json")
+	//	defer writeResponse(w, count)
 	//	var wg sync.WaitGroup
 	//	for i := 0; i < 10; i++ {
 	//		wg.Add(1)
